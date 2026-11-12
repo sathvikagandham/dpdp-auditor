@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DPDP Compliance Auditor</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; background-color: #f4f4f9; }
+        h1 { color: #333; }
+        textarea { width: 100%; height: 150px; padding: 10px; margin-bottom: 20px; border: 1px solid #ccc; border-radius: 5px; font-size: 16px; }
+        button { background-color: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; }
+        button:hover { background-color: #0056b3; }
+        #result { margin-top: 20px; padding: 20px; background-color: white; border-radius: 5px; box-shadow: 0 0 10px rgba(0,0,0,0.1); display: none; }
+        .success { border-left: 5px solid #28a745; }
+        .failed { border-left: 5px solid #dc3545; }
+    </style>
+</head>
+<body>
+    <h1>DPDP Compliance Auditor</h1>
+    <p>Paste a privacy policy or code snippet below to check for DPDP Act violations.</p>
+    
+    <textarea id="policyInput" placeholder="Example: We share user data with marketing partners."></textarea>
+    <button onclick="auditPolicy()">Run Audit</button>
+
+    <div id="result"></div>
+
+    <script>
+        async function auditPolicy() {
+            const text = document.getElementById("policyInput").value;
+            const resultDiv = document.getElementById("result");
+            
+            if (!text) {
+                alert("Please enter some text first!");
+                return;
+            }
+
+            resultDiv.style.display = "block";
+            resultDiv.className = "";
+            resultDiv.innerHTML = "Analyzing... Please wait (this may take 10-15 seconds)...";
+
+            try {
+                const response = await fetch("/audit", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ text: text })
+                });
+
+                const data = await response.json();
+
+                if (data.status === "success") {
+                    const finding = data.finding;
+                    resultDiv.className = "success";
+                    resultDiv.innerHTML = `
+                        <h3>✅ Violation Found!</h3>
+                        <p><strong>Violated Section:</strong> ${finding.violated_section}</p>
+                        <p><strong>Evidence from Law:</strong> "${finding.evidence}"</p>
+                        <p><strong>Explanation:</strong> ${finding.explanation}</p>
+                        <p><strong>Confidence:</strong> ${finding.confidence_score}</p>
+                    `;
+                } else {
+                    resultDiv.className = "failed";
+                    resultDiv.innerHTML = `<h3>❌ Audit Failed</h3><p>${data.message}</p>`;
+                }
+            } catch (error) {
+                resultDiv.className = "failed";
+                resultDiv.innerHTML = `<h3>❌ Server Error</h3><p>${error.message}</p>`;
+            }
+        }
+    </script>
+</body>
+</html>

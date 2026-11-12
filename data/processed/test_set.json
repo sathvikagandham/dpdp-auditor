@@ -1,0 +1,23 @@
+[
+    {
+        "claim":"We collect email addresses for account creation.",
+        "expected_section":"5."
+    },
+
+    {
+        "claim":"We share user data with marketing partners.",
+        "expected_section":"8."
+    },
+    {
+        "claim":"The company retains data indefinitely.",
+        "expected_section":"8."
+    },
+    {
+        "claim":"Users have the right to correct their personal inforation.",
+        "expected_section":"11."
+    },
+    {
+        "claim":"If there is a data breach, the company must notify the board.",
+        "expected_section":"26."
+    }
+]

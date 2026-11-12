@@ -1,0 +1,11 @@
+pymupdf
+chromadb
+rank_bm25
+sentence-transformers
+langgraph
+pydantic
+fastapi
+uvicorn
+python-dotenv
+openai
+httpx

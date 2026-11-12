@@ -1,0 +1,10 @@
+from sentence_transformers import SentenceTransformer,util
+model=SentenceTransformer('all-MiniLM-L6-v2')
+v1=model.encode("We share your data with third parties for marketing.")
+v2=model.encode("Personal data is transferred to external companies for promotional purposes.")
+v3=model.encode("The weather in New Delhi is very hot today.")
+cs1=util.cos_sim(v1,v2)
+print(cs1)
+cs2=util.cos_sim(v1,v3)
+print(cs2)
+print(cs1[0][0].item())

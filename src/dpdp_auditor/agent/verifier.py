@@ -1,19 +1,27 @@
-import json
-from pydantic import ValidationError
 from dpdp_auditor.models.schemas import AuditFinding
-from dpdp_auditor.agent.auditor import audit_claim
+import re
 
-
-
-def verify_finding(finding:AuditFinding,law_chunk:str) ->bool:
-    if finding.violated_section=="Unknown Section" or finding.evidence=="No evidence provided":
+def verify_finding(finding: AuditFinding, user_policy: str, law_chunk: str) -> bool:
+    # 1. Check for missing defaults
+    if not finding.violated_section or not finding.policy_evidence or not finding.legal_evidence:
         return False
-    if finding.violated_section.lower() not in law_chunk.lower():
+        
+    # 2. Verify Section Number exists (e.g., extract '8' from 'Section 8')
+    section_num = re.search(r'\d+', finding.violated_section)
+    if not section_num or section_num.group() not in law_chunk:
         return False
-    if finding.evidence.lower().strip() not in law_chunk.lower():
+        
+    # 3. Verify Policy Evidence exists in user's submitted text
+    if finding.policy_evidence.lower().strip() not in user_policy.lower():
+        print("❌ Policy evidence hallucinated or not exact.")
         return False
+        
+    # 4. Verify Legal Evidence exists in retrieved law chunk
+    if finding.legal_evidence.lower().strip() not in law_chunk.lower():
+        print("❌ Legal evidence hallucinated or not exact.")
+        return False
+        
     return True
-
 
 
  

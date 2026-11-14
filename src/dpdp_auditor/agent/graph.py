@@ -2,7 +2,7 @@ from langgraph.graph import StateGraph, START, END
 from typing import TypedDict
 import json
 import chromadb
-from sentence_transformers import SentenceTransformer
+from sentence_transformers import SentenceTransformer,CrossEncoder
 
 # Import your custom modules
 from dpdp_auditor.retrieval.hybrid_search import HybridSearch
@@ -51,10 +51,23 @@ def retrieve_node(state: AgentState):
     
     # Load the search engines (this will only take time on the very first request)
     hybrid = get_search_engines()
+
+    dynamic_top_n = 5 + (state["retries"] * 5)
     
-    results = hybrid.search(state["claim"], top_n=1)
-    chunk_text = results[0][0]
-    return {"law_chunk": chunk_text}
+    results = hybrid.search(state["claim"], top_n=dynamic_top_n)
+    chunk_texts = [chunk for chunk,score in results] #results[0][0]
+
+    if not chunk_texts:
+        return {"law_chunk":""}
+    
+    cross_encoder=CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
+    pairs=[(state["claim"],chunk) for chunk in chunk_texts]
+    rerank_scores=cross_encoder.predict(pairs)
+
+    best_index=rerank_scores.argmax()
+    best_chunk=chunk_texts[best_index]
+
+    return {"law_chunk":best_chunk}
 
 def audit_node(state: AgentState):
     print(f"  [Audit Node] Auditing claim against law...")
@@ -71,7 +84,7 @@ def verify_node(state: AgentState):
         return state
 
     finding_obj = AuditFinding(**state["finding"])
-    is_valid = verify_finding(finding_obj, state["law_chunk"])
+    is_valid = verify_finding(finding_obj, state["claim"], state["law_chunk"])
 
     if not is_valid:
         print("  [Verify Node] ❌ Verification FAILED. Evidence is hallucinated.")

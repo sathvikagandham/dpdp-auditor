@@ -2,7 +2,7 @@ from langgraph.graph import StateGraph, START, END
 from typing import TypedDict
 import json
 import chromadb
-from sentence_transformers import SentenceTransformer,CrossEncoder
+from sentence_transformers import SentenceTransformer, CrossEncoder
 
 # Import your custom modules
 from dpdp_auditor.retrieval.hybrid_search import HybridSearch
@@ -12,7 +12,6 @@ from dpdp_auditor.agent.auditor import audit_claim
 from dpdp_auditor.agent.verifier import verify_finding
 from dpdp_auditor.models.schemas import AuditFinding
 
-# 1. Setup LLM (this is lightweight, just an API wrapper, so it can stay here)
 llm_client = get_llm_client()
 
 class AgentState(TypedDict):
@@ -22,16 +21,15 @@ class AgentState(TypedDict):
     retries: int
 
 # --- GLOBAL CACHE FOR HEAVY MODELS ---
-# We use these to store the models after they load the first time.
 _model = None
 _bm25 = None
 _collection = None
+_cross_encoder = None
 
 def get_search_engines():
     """Lazy loads the heavy models only when needed."""
-    global _model, _bm25, _collection
+    global _model, _bm25, _collection, _cross_encoder
     
-    # If they are not loaded yet, load them
     if _model is None:
         print("  [System] Lazy loading SentenceTransformer and ChromaDB...")
         with open("data/processed/chunks.json", "r", encoding="utf-8") as f:
@@ -42,32 +40,34 @@ def get_search_engines():
         chroma_client = chromadb.PersistentClient(path="data/processed/chroma_db")
         _collection = chroma_client.get_or_create_collection(name="dpdp_sections")
         
+    if _cross_encoder is None:
+        print("  [System] Lazy loading CrossEncoder...")
+        _cross_encoder = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
+        
     return HybridSearch(bm25_search=_bm25, chroma_collection=_collection, model=_model)
 
 # --- NODES ---
 
 def retrieve_node(state: AgentState):
-    print(f"  [Retrieve Node] Searching for: {state['claim']}")
+    print(f"  [Retrieve Node] Searching for: {state['claim']} (Attempt {state['retries'] + 1})")
     
-    # Load the search engines (this will only take time on the very first request)
     hybrid = get_search_engines()
-
-    dynamic_top_n = 5 + (state["retries"] * 5)
     
+    # Dynamically expand retrieval on retries
+    dynamic_top_n = 5 + (state["retries"] * 5)
     results = hybrid.search(state["claim"], top_n=dynamic_top_n)
-    chunk_texts = [chunk for chunk,score in results] #results[0][0]
+    chunk_texts = [chunk for chunk, score in results]
 
     if not chunk_texts:
-        return {"law_chunk":""}
+        return {"law_chunk": ""}
     
-    cross_encoder=CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
-    pairs=[(state["claim"],chunk) for chunk in chunk_texts]
-    rerank_scores=cross_encoder.predict(pairs)
+    pairs = [(state["claim"], chunk) for chunk in chunk_texts]
+    rerank_scores = _cross_encoder.predict(pairs)
 
-    best_index=rerank_scores.argmax()
-    best_chunk=chunk_texts[best_index]
+    best_index = rerank_scores.argmax()
+    best_chunk = chunk_texts[best_index]
 
-    return {"law_chunk":best_chunk}
+    return {"law_chunk": best_chunk}
 
 def audit_node(state: AgentState):
     print(f"  [Audit Node] Auditing claim against law...")
@@ -84,6 +84,8 @@ def verify_node(state: AgentState):
         return state
 
     finding_obj = AuditFinding(**state["finding"])
+    
+    # Pass both the claim (user policy) and law_chunk to the verifier
     is_valid = verify_finding(finding_obj, state["claim"], state["law_chunk"])
 
     if not is_valid:
